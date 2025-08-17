@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: '20'
 
+      # Si no tienes package-lock.json, usa npm install
       - name: Install deps
         run: npm install
 
@@ -27,24 +28,29 @@ jobs:
   docker:
     needs: build-test
     runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/hello-ci
+    # Evita correr el job si faltan los secrets
+    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set image name
+        # Construye IMAGE_NAME correctamente con tu usuario
+        run: echo "IMAGE_NAME=${DOCKERHUB_USERNAME}/hello-ci" >> $GITHUB_ENV
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
       - name: Log in to Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
-        run: |
-          echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build image
         run: |
           docker build -t "${IMAGE_NAME}:latest" -t "${IMAGE_NAME}:${{ github.sha }}" .
 
-      - name: Push image (latest)
+      - name: Push image
         run: |
           docker push "${IMAGE_NAME}:latest"
           docker push "${IMAGE_NAME}:${{ github.sha }}"
@@ -52,12 +58,10 @@ jobs:
   deploy:
     needs: docker
     runs-on: ubuntu-latest
-    env:
-      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+    # Solo si definiste el hook de Render
+    if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
     steps:
-      - name: Trigger Render Deploy Hook (si está configurado)
-      # El step solo corre si definiste el secret en el repo
-        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
-        run: |
-          echo "Disparando deploy en Render..."
-          curl -X POST "$RENDER_DEPLOY_HOOK_URL"
+      - name: Trigger Render Deploy Hook
+        run: curl -X POST "${RENDER_DEPLOY_HOOK_URL}"
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
