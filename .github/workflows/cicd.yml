@@ -18,9 +18,14 @@ jobs:
         with:
           node-version: '20'
 
-      # Si no tienes package-lock.json, usa npm install
+      # Usa npm install si no has commiteado package-lock.json
       - name: Install deps
-        run: npm install
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run tests
         run: npm test
@@ -28,29 +33,31 @@ jobs:
   docker:
     needs: build-test
     runs-on: ubuntu-latest
-    # Evita correr el job si faltan los secrets
-    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    # Mapea secrets a env a nivel de job
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set image name
-        # Construye IMAGE_NAME correctamente con tu usuario
-        run: echo "IMAGE_NAME=${DOCKERHUB_USERNAME}/hello-ci" >> $GITHUB_ENV
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      - name: Compute IMAGE_NAME
+        # Solo construye IMAGE_NAME si hay usuario
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        run: echo "IMAGE_NAME=${DOCKERHUB_USERNAME}/hello-ci" >> "$GITHUB_ENV"
 
       - name: Log in to Docker Hub
-        run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        run: |
+          echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
 
       - name: Build image
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
         run: |
           docker build -t "${IMAGE_NAME}:latest" -t "${IMAGE_NAME}:${{ github.sha }}" .
 
       - name: Push image
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
         run: |
           docker push "${IMAGE_NAME}:latest"
           docker push "${IMAGE_NAME}:${{ github.sha }}"
@@ -58,10 +65,9 @@ jobs:
   deploy:
     needs: docker
     runs-on: ubuntu-latest
-    # Solo si definiste el hook de Render
-    if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
     steps:
       - name: Trigger Render Deploy Hook
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
         run: curl -X POST "${RENDER_DEPLOY_HOOK_URL}"
-        env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
