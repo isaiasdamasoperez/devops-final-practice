@@ -1,0 +1,63 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  docker:
+    needs: build-test
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/hello-ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        run: |
+          echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+
+      - name: Build image
+        run: |
+          docker build -t "${IMAGE_NAME}:latest" -t "${IMAGE_NAME}:${{ github.sha }}" .
+
+      - name: Push image (latest)
+        run: |
+          docker push "${IMAGE_NAME}:latest"
+          docker push "${IMAGE_NAME}:${{ github.sha }}"
+
+  deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+    steps:
+      - name: Trigger Render Deploy Hook (si está configurado)
+      # El step solo corre si definiste el secret en el repo
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
+        run: |
+          echo "Disparando deploy en Render..."
+          curl -X POST "$RENDER_DEPLOY_HOOK_URL"

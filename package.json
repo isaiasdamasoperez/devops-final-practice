@@ -1,0 +1,27 @@
+{
+  "name": "hello-ci",
+  "version": "1.0.0",
+  "description": "Hello World Express app con CI/CD, Docker y Render",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "jest --ci"
+  },
+  "keywords": [
+    "express",
+    "devops",
+    "ci-cd",
+    "docker",
+    "render"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
