@@ -1,18 +1,20 @@
 # Imagen base oficial de Node
 FROM node:20-alpine
 
-# Crear directorio de la app
 WORKDIR /app
 
-# Instalar dependencias primero (mejor cache)
-COPY package.json package-lock.json* /app/
-RUN npm ci --omit=dev
+# Copia manifest(s)
+COPY package*.json ./
 
-# Copiar código
-COPY . /app
+# Si hay lockfile usa npm ci; si no, npm install
+RUN if [ -f package-lock.json ]; then \
+      npm ci --omit=dev; \
+    else \
+      npm install --omit=dev; \
+    fi
 
-# Puerto expuesto
+# Copia el resto del código
+COPY . .
+
 EXPOSE 3000
-
-# Comando de inicio
 CMD ["node", "src/index.js"]
